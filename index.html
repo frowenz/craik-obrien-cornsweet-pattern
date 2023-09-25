@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="icon.png" type="image/png">
+    <title>Craik-O'Brien-Cornsweet Pattern</title>
+
+    <style>
+        :root {
+            --background-color: #f1f1f1;
+            --text-color: #333;
+            --accent-color: #aaa;
+            --bold-color: #666;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        #container {
+            display: flex;
+            flex-direction: row;
+            width: fit-content;
+        }
+
+        .controls {
+            margin: 15px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            padding: 20px;
+            width: 250px;
+            border-radius: 5px;
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.3);
+        }
+
+        #downloadButton {
+            cursor: pointer;
+            width: 100%;
+        }
+
+        #graphCanvas {
+            padding: unset;
+            width: 290px;
+        }
+
+        #widgets-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1rem;
+        }
+
+        span {
+            font-weight: bold;
+            color: var(--bold-color);
+        }
+
+        input[type=range] {
+            accent-color: var(--accent-color);
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+
+        input[type=button] {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            font-weight: bold;
+        }
+
+        @media screen and (max-width: 768px) {
+            #container {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            canvas {
+                width: 100%;
+                max-width: 100%;
+                height: auto;
+            }
+
+            .controls {
+                width: 100%;
+                max-width: 300px;
+                margin: 20px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <canvas id="myCanvas" width="500" height="500"></canvas>
+        <div id="widgets-container">
+            <div class="controls">
+                <label>
+                    <span>Epsilon:</span>
+                    <span id="epsilonValue">0.5%</span>
+                </label>
+                <input id="epsilon" type="range" min="0" max="0.02" step="0.005" value="0.005">
+
+                <label>
+                    <span>Spread:</span>
+                    <span id="spreadValue">25%</span>
+                </label>
+                <input id="spread" type="range" min="0" max="0.45" step="0.025" value="0.25">
+
+                <label>
+                    <span>Exponent:</span>
+                    <span id="exponentValue">2</span>
+                </label>
+                
+                <input id="exponent" type="range" min="1" max="3" step="0.1" value="2">
+
+                <label>
+                    <span>Delta:</span>
+                    <span id="deltaValue">2</span>
+                </label>
+                
+                <input id="delta" type="range" min="0" max="128" step="1" value="64">
+
+                <input type="button" value="Download Image" id="downloadButton">
+            </div>
+            <canvas id="graphCanvas" class="controls" width="290" height="100"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Initialize canvas and variables
+        const canvas = document.getElementById("myCanvas");
+        const ctx = canvas.getContext("2d");
+
+        var delta = 128
+        var initialGray = 128;
+        var black = 0;
+
+        function updateColors() {
+            const delta = parseFloat(document.getElementById("delta").value);
+            document.getElementById("deltaValue").innerText = delta.toFixed(1);
+            return {
+                whiteColor: initialGray + delta,
+                darkColor: initialGray - delta
+            };
+        }
+
+        var { whiteColor, darkColor } = updateColors();
+        
+        function powerCurve(t, a, b, n) {
+            return a + (b - a) * Math.pow(t, n);
+        }
+        
+        function getColor(t, exponent, epsilon, spread) {
+            const { whiteColor, darkColor } = updateColors();
+            if (t < 0.95 && spread == 0) {
+                return initialGray;
+            }
+
+            let color;
+            if (t < 0.5 - spread) {
+                color = initialGray;
+            } else if (t < 0.5 - epsilon) {
+                // Power curve to transition from initialGray to whiteColor
+                color = powerCurve((t - (0.5 - spread)) / (0.5 - epsilon - (0.5 - spread)), initialGray, whiteColor, exponent);
+            } else if ((t < 0.5 + epsilon)) {
+                // Linear interpolation between whiteColor and darkColor
+                color = whiteColor + (darkColor - whiteColor) * ((t - (0.5 - epsilon)) / (2 * epsilon));
+            } else if (t <= 0.5 + spread) {
+                // Power curve to transition from darkColor to initialGray
+                color = powerCurve((0.5 + spread - t) / (0.5 + spread - (0.5 + epsilon)), initialGray, darkColor, exponent);
+            } else if (t <= 0.95) {
+                color = initialGray;
+            }
+            else {
+                color = black
+            }
+            return color;
+        }
+
+
+        function draw() {
+            const { whiteColor, darkColor } = updateColors();
+
+            const exponent = parseFloat(document.getElementById("exponent").value);
+            const epsilon = parseFloat(document.getElementById("epsilon").value);
+            const spread = parseFloat(document.getElementById("spread").value);
+            const delta = parseFloat(document.getElementById("delta").value);
+
+            document.getElementById("exponentValue").innerText = exponent.toFixed(1);
+            document.getElementById("epsilonValue").innerText = (epsilon * 100).toFixed(1) + '%';
+            document.getElementById("spreadValue").innerText = (spread * 100).toFixed(1) + '%';
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = Math.min(centerX, centerY);
+
+            const imageData = ctx.createImageData(canvas.width, canvas.height);
+            const data = imageData.data;
+
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const dx = x - centerX;
+                    const dy = y - centerY;
+                    let t = Math.sqrt(dx * dx + dy * dy) / radius;
+
+                    let color = getColor(t, exponent, epsilon, spread);
+
+                    const index = (y * canvas.width + x) * 4;
+                    data[index] = color;
+                    data[index + 1] = color;
+                    data[index + 2] = color;
+                    data[index + 3] = 255;
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // Initial draw
+        draw();
+
+        // Attach event listeners to update dynamically
+        document.getElementById("epsilon").addEventListener("input", draw);
+        document.getElementById("spread").addEventListener("input", draw);
+        document.getElementById("exponent").addEventListener("input", draw);
+        document.getElementById("delta").addEventListener("input", draw);
+
+        // Download functionality
+        document.getElementById("downloadButton").addEventListener("click", function () {
+            const canvas = document.getElementById("myCanvas");
+            const image = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+            const link = document.createElement('a');
+            link.href = image;
+            link.download = "craik-obrien-cornsweet.png";
+            link.click();
+        });
+
+    </script>
+
+    <script>
+        function drawGraph() {
+            const { whiteColor, darkColor } = updateColors();
+
+            const graphCanvas = document.getElementById("graphCanvas");
+            const graphCtx = graphCanvas.getContext("2d");
+
+            // Clear the canvas
+            graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
+
+            const exponent = parseFloat(document.getElementById("exponent").value);
+            const epsilon = parseFloat(document.getElementById("epsilon").value);
+            const spread = parseFloat(document.getElementById("spread").value);
+            const delta = parseFloat(document.getElementById("delta").value);
+
+            const maxX = graphCanvas.width;
+            const maxY = graphCanvas.height;
+
+            // Center the zero point on y-axis to be at initialGray value
+            const centerY = maxY / 2;
+
+            const prevPoints = []; // to store previous points for drawing lines
+
+            for (let x = 0; x <= maxX; x++) {
+                let t = x / maxX;
+
+                let color = getColor(t, exponent, epsilon, spread);
+                if (t > 0.95) {
+                    color = initialGray;
+                }
+
+                // Calculate y-position based on color value and centering around initialGray
+                let y = centerY - ((color - initialGray) / 255) * maxY;
+
+                prevPoints.push({ x, y });
+
+                if (prevPoints.length > 1) {
+                    graphCtx.beginPath();
+                    graphCtx.strokeStyle = 'black';  
+                    graphCtx.moveTo(prevPoints[0].x, prevPoints[0].y);
+                    graphCtx.lineTo(prevPoints[1].x, prevPoints[1].y);
+                    graphCtx.stroke();
+                    prevPoints.shift();
+                }
+            }
+        }
+
+        // Attach event listeners to update dynamically
+        document.getElementById("epsilon").addEventListener("input", drawGraph);
+        document.getElementById("spread").addEventListener("input", drawGraph);
+        document.getElementById("exponent").addEventListener("input", drawGraph);
+        document.getElementById("delta").addEventListener("input", drawGraph);
+
+        // Initial graph draw
+        drawGraph();
+
+    </script>
+</body>
+
+</html>
